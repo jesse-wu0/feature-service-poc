@@ -1,0 +1,18 @@
+# These lines are intended to ensure that the teams who maintain components
+# of this example are informed of relevant updates to the example service.
+# 
+# If you've cloned this repo to use as a template for your service, you can delete
+# these lines.
+* @procore/application-infrastructure
+/src/demo/calculator/ @procore/test-tooling-and-frameworks
+jest.config.js @procore/test-tooling-and-frameworks
+/test/ @procore/test-tooling-and-frameworks
+test/perf/ @procore/performance-engineering-team
+
+# The concerns below will eventually be extracted into versioned and distributed
+# packages. In the interim, please leave the following lines in place to ensure
+# that Application Infrastructure is aware of any updates that you need to make
+# here. That will allow us to ensure that our upstream package supports your
+# needs and is easy to install once it's available.
+charts/stateless-http-service/ @procore/application-infrastructure
+charts/helpers-library @procore/application-infrastructure

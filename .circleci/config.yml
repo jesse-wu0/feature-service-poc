@@ -1,0 +1,275 @@
+version: 2.1
+defaults: &defaults
+  working_directory: ~/app
+  docker:
+    - image: node:16-alpine
+parameters:
+  service_name:
+    type: string
+    default: simple-backend-nest-service
+orbs:
+  helm: circleci/helm@1.2.0
+  aws-cli: circleci/aws-cli@1.3.0
+jobs:
+  setup_workspace:
+    <<: *defaults
+    steps:
+      - checkout
+      - persist_to_workspace:
+          root: ~/
+          paths:
+            - app
+  install_dependencies:
+    <<: *defaults
+    steps:
+      - attach_workspace:
+          at: ~/
+      - restore_cache:
+          keys:
+            - << pipeline.parameters.service_name >>-v2-package-{{ checksum "package-lock.json" }}
+      - run:
+          name: Create .npmrc
+          command: npm config set '//registry.npmjs.org/:_authToken' "${NPM_TOKEN}"
+      - run:
+          name: Install Dependencies
+          command: npm install
+      - save_cache:
+          key: << pipeline.parameters.service_name >>-v2-package-{{ checksum "package-lock.json" }}
+          paths:
+            - ./node_modules
+      - persist_to_workspace:
+          root: ~/
+          paths:
+            - app
+  security_audit:
+    working_directory: ~/app
+    docker:
+      - image: snyk/snyk:alpine
+    steps:
+      - attach_workspace:
+          at: ~/
+      - run:
+          name: Snyk Monitor
+          command: snyk test || snyk monitor || true
+  depcheck:
+    <<: *defaults
+    steps:
+      - attach_workspace:
+          at: ~/
+      - run: npm run depcheck
+  test_unit_with_coverage:
+    <<: *defaults
+    steps:
+      - attach_workspace:
+          at: ~/
+      # If a container exposes fewer vCPUs than physically available machine CPUs
+      # Jest's `maxWorkers` must be set to match the vCPUs allocated to the container
+      # CircleCI's Medium Resource Class Allocates Only 2 vCPUs
+      - run: timeout 10m npm run test:cov -- --maxWorkers=2
+      - store_artifacts:
+          path: reports
+      - store_test_results:
+          path: reports
+  test_e2e:
+    <<: *defaults
+    steps:
+      - attach_workspace:
+          at: ~/
+      # If a container exposes fewer vCPUs than physically available machine CPUs
+      # Jest's `maxWorkers` must be set to match the vCPUs allocated to the container
+      # CircleCI's Medium Resource Class Allocates Only 2 vCPUs
+      - run: timeout 10m npm run test:e2e -- --maxWorkers=2
+      - store_artifacts:
+          path: reports
+      - store_test_results:
+          path: reports
+  lint_dockerfile:
+    working_directory: ~/app
+    docker:
+      - image: hadolint/hadolint:latest-alpine
+    steps:
+      - attach_workspace:
+          at: ~/
+      - run: hadolint Dockerfile
+  image_build:
+    docker:
+      - image: docker:latest
+    working_directory: ~/app
+    steps:
+      - setup_remote_docker:
+          version: 19.03.13
+          docker_layer_caching: true
+      - checkout
+      - run:
+          name: Docker Login
+          command: |
+            echo $QUAY_PASSWORD |
+              docker login \
+              --username $QUAY_USERNAME \
+              --password-stdin \
+              quay.io
+      - run:
+          name: Persist NPM_TOKEN
+          command: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > /tmp/NPM_TOKEN.txt
+      - run:
+          name: Build Image
+          command: |
+            DOCKER_BUILDKIT=1 \
+            docker build \
+              --build-arg app_version=${CIRCLE_SHA1} \
+              --secret id=NPM_TOKEN,src=/tmp/NPM_TOKEN.txt \
+              --progress=plain \
+              -t "quay.io/procoredevops/<< pipeline.parameters.service_name >>:${CIRCLE_SHA1}" .
+      - when:
+          condition:
+            equal: [main, << pipeline.git.branch >>]
+          steps:
+            - run:
+                name: Tag Canonical Image
+                command: docker tag quay.io/procoredevops/<< pipeline.parameters.service_name >>:$CIRCLE_SHA1 quay.io/procoredevops/<< pipeline.parameters.service_name >>:latest
+      - run:
+          name: Push Image
+          command: docker push --all-tags quay.io/procoredevops/<< pipeline.parameters.service_name >>
+  check_formatted:
+    <<: *defaults
+    steps:
+      - attach_workspace:
+          at: ~/
+      - run:
+          name: Verify formatted
+          command: npm run format:check
+  eslint:
+    <<: *defaults
+    steps:
+      - attach_workspace:
+          at: ~/
+      - run:
+          name: Run eslint
+          command: npm run lint:check
+  typecheck:
+    <<: *defaults
+    steps:
+      - attach_workspace:
+          at: ~/
+      - run:
+          name: Run typecheck
+          command: npm run typecheck
+  publish_to_bugsnag:
+    <<: *defaults
+    steps:
+      - attach_workspace:
+          at: ~/
+      - run:
+          name: Publish the build to bugsnag
+          command: APP_VERSION=$CIRCLE_SHA1 npm run report-build
+      - run:
+          name: Publish the sourcemaps to bugsnag
+          command: APP_VERSION=$CIRCLE_SHA1 npm run report-sourcemaps
+  chart_lint:
+    docker:
+      - image: cimg/base:2021.02
+    steps:
+      - checkout
+      - helm/install-helm-client:
+          version: v3.5.2
+          stable-repo-url: https://charts.helm.sh/stable
+      - run:
+          name: Lint with values for each stage
+          # `grep -v stateless` excludes values from inside the stateless-http-service subchart
+          # and is only necessary until that chart is packaged up separately.
+          command: |
+            for VALUES in $(circleci tests glob .charts/<< pipeline.parameters.service_name >>/**/values.yaml | grep -ve stateless); do
+              echo "[LINT] Checking values file: ${VALUES}"
+              helm lint --strict --set-string serviceName=ci --with-subcharts .charts/<< pipeline.parameters.service_name >> --values $VALUES
+            done
+  chart_to_s3:
+    docker:
+      - image: cimg/base:2021.02
+    steps:
+      - aws-cli/setup:
+          aws-access-key-id: HELM_S3_AWS_ACCESS_KEY_ID
+          aws-secret-access-key: HELM_S3_AWS_SECRET_ACCESS_KEY
+          aws-region: HELM_S3_AWS_REGION
+      - checkout
+      - helm/install-helm-client:
+          version: v3.5.2
+      - run: helm plugin install https://github.com/hypnoglow/helm-s3.git
+      - run: helm repo add procore s3://procore-helm-charts
+      - run: helm dep build .charts/<< pipeline.parameters.service_name >>
+      - run: helm package .charts/<< pipeline.parameters.service_name >>
+      - run: |
+          helm s3 push --ignore-if-exists << pipeline.parameters.service_name >>-*.tgz procore
+  deploy:
+    docker:
+      - image: governmentpaas/curl-ssl
+    working_directory: ~/deploy
+    steps:
+      - deploy:
+          name: Deploy Main
+          command: |
+            curl -H "Content-Type: application/json" \
+              -H "Authorization: Token token=${CD_API_TOKEN}" \
+              -X POST \
+              -d "{\"deploy\":{\"trekker_name\":\"<< pipeline.parameters.service_name >>\",\"options\":{\"sha\":\"${CIRCLE_SHA1}\"}}}" \
+              https://sherpa.procoretech.com/api/v1/continuous_deploys
+workflows:
+  version: 2
+  build_and_test:
+    jobs:
+      - setup_workspace
+      - install_dependencies:
+          requires:
+            - setup_workspace
+          context:
+            - npm-procore-private-read
+      - security_audit:
+          requires:
+            - install_dependencies
+      - depcheck:
+          requires:
+            - install_dependencies
+      - lint_dockerfile:
+          requires:
+            - setup_workspace
+      - test_unit_with_coverage:
+          requires:
+            - install_dependencies
+      - test_e2e:
+          requires:
+            - install_dependencies
+      - image_build:
+          context:
+            - npm-procore-private-read
+      - check_formatted:
+          requires:
+            - install_dependencies
+      - eslint:
+          requires:
+            - install_dependencies
+      - typecheck:
+          requires:
+            - install_dependencies
+      - chart_lint
+      - chart_to_s3:
+          context: helm-package-release
+          requires:
+            - chart_lint
+      - deploy:
+          filters:
+            branches:
+              only: main
+          requires:
+            - lint_dockerfile
+            - security_audit
+            - check_formatted
+            - eslint
+            - chart_to_s3
+            - image_build
+            - test_unit_with_coverage
+            - test_e2e
+      - publish_to_bugsnag:
+          filters:
+            branches:
+              only: main
+          requires:
+            - deploy

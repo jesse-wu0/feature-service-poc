@@ -1,0 +1,24 @@
+stateless-http-service:
+
+  env:
+    ENV: local
+    STAGE: local
+    CLUSTER: application
+
+  newrelic:
+    enabled: false
+
+  bugsnag:
+    enabled: false
+
+  datadog:
+    enabled: true
+
+  autoscaling:
+    enabled: true
+
+  nodeGroup: ""
+
+  image:
+    repository: quay.io/procoredevops/simple-backend-nest-service
+    tag: ""

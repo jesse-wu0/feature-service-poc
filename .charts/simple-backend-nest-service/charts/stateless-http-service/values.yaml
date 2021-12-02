@@ -1,0 +1,149 @@
+# The container port where the service will listen. Exposed to the container
+# environment as PORT
+port: 3000
+
+env:
+  # These variables will be passed through directly to the container
+  # PORT will be set from the above value
+  LOG_LEVEL: info
+  ENV: development
+  STAGE: development
+  PZ: us01
+  CLUSTER: us01
+
+# Provide a list of keys present in the {serviceName}-secret in order
+# to make them available as ENV vars to the application deployment.
+# ENV var names will be uppercased.
+secretKeys: []
+
+image: {}
+imagePullPolicy: IfNotPresent
+
+newrelic:
+  # If enabled, Secrets.{serviceName}.new_relic_license_key must be set
+  enabled: false
+
+bugsnag:
+  # If enabled, Secrets.{serviceName}.bugsnag_api_key must be set
+  enabled: false
+
+datadog:
+  # If enabled, assumes a DataDog agent is running as a DaemonSet on the host
+  enabled: false
+
+# The desired number of pods in the Deployment, will be overridden if autoscaling is enabled
+replicaCount: 3
+
+# The specific workload node group desired for the workload
+# Options are documented here: https://procoretech.atlassian.net/wiki/spaces/CPO/pages/1874101821/Kubernetes+Work+Load+Targeting+for+Pods
+# Values include: cpu_optimized, memory_optimized, and gpu_optimized (exclusive to AI/ML clusters)
+nodeGroup:
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+resources:
+  # If these limits are exceeded, the process will be killed
+  requests:
+    memory: 128Mi
+    cpu: 250m
+  limits:
+    memory: 128Mi
+    cpu: 250m
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingressEnabled:
+  private: false
+  vpn: false
+
+ingressDev:
+  forwardHttpsProtoHeader: false
+  gatewayName: istio-private-ingressgateway
+  hostNames: []
+
+ingressPrivate:
+  # Ingress is for private VPC only traffic to your service using procoretech.internal domains
+  # The forwardHttpsProtoHeader property is used to add a `x-forwarded-proto: https` header
+  # if necessary for your application to prevent http -> https redirect loops
+  # If ingress is enabled, gatewayNames and hostNames are required
+  # Different gateway names are required for different clusters, by default this chart supports cluster us01
+  # See this documentation for appropriate gatewayNames
+  # https://procoretech.atlassian.net/wiki/spaces/CSE/pages/2224195637/Ingress+configuration+and+Gateway+Virtual+Service+requirements+and+information+living+document
+  forwardHttpsProtoHeader: false
+  gatewayNames:
+    - istio-system/istio-private-us01-istio-ingress-gateway
+  hostNames: []
+
+ingressVpn:
+  # VPN ingress should be used when your application provides a "Procore employee only" UI
+  # which should be accessible via GlobalProtect VPN or on-premises networks using
+  # procoretech-qa.com or procoretech.com domains
+  # The forwardHttpsProtoHeader property is used to add a `x-forwarded-proto: https` header
+  # if necessary for your application to prevent http -> https redirect loops
+  # If VPN ingress is enabled, gatewayName and hostNames are required
+  forwardHttpsProtoHeader: false
+  gatewayName: istio-private-vpn-ingressgateway
+  hostNames: []
+
+oauth:
+  # OAuth configuration defaults to the Google provider
+  # The default configuration requires that the `redirect_uri` for your app be added to allowed values
+  # A kubernetes secret must be created with values for CLIENT_ID, CLIENT_SECRET, and COOKIE_SECRET.
+  # Google OAuth secrets can be found in SSM with the path prefix `/apps/global/google-oauth/`
+  # See https://github.com/procore/terraform-aws-apps/pull/134 for example kubernetes secret creation via terraform
+  # Please see https://oauth2-proxy.github.io/oauth2-proxy/docs/configuration/overview for configuration details
+  enabled: false
+  oauth2_proxy_port: 9000
+  oauth2_proxy_redirect_url: ""
+  oauth2_proxy_prefix: "" # default is /oauth2
+  oauth2_secrets_name: "" # name of kubernetes secret containing CLIENT_ID, CLIENT_SECRET, and COOKIE_SECRET
+  oauth2_provider: "google"
+  oauth2_oidc_issuer_url: "" # only required for "oidc" provider (ie. Okta)
+
+# Provides the ability to map volume sources (e.g. Secrets, ConfigMap, etc)
+# from the same namespace into the same directory. For more info see:
+# https://kubernetes.io/docs/concepts/storage/volumes/#projected
+projectedDataVolumeSources: []
+
+probes:
+  # These probes are passed directly through as Kubernetes liveness, readiness
+  # and startup probe configuration.
+  #
+  # We would like to ensure that the default configuration Just Works™ when
+  # using supported service templates. If you find yourself needing to supply
+  # non-default values here, consider posting that feedback in the
+  # #service-templates Slack channel
+  liveness:
+    tcpSocket:
+      port: http
+    initialDelaySeconds: 30
+    periodSeconds: 20
+
+  # If you wish to use other probes, like httpGet, input your full livenessProbe params as below
+  livenessProbeOverride:
+    # initialDelaySeconds: 30
+    # periodSeconds: 10
+    # failureThreshold: 3
+    # timeoutSeconds: 2
+    # httpGet:
+    #   path: /health/live
+    #   port: http
+
+  readiness:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10

@@ -1,0 +1,29 @@
+services:
+  # Service Settings for k6 Integration
+  # Note: You can only compose one statsd container at a time.
+  datadog-statsd:
+    container_name: 'datadog-statsd'
+    environment:
+      # Taken from your .env file, refer to ./test/perf/readme.md
+      # for additional instructions on obtaining a key.
+      - DD_API_KEY=${DATADOG_K6_API_KEY}
+      - DD_DOGSTATSD_NON_LOCAL_TRAFFIC=1
+      - DD_TAGS='app:k6 k6:sbns_perf env:dev role:load-testing'
+    image: 'datadog/agent:latest'
+    ports:
+      - '8125:8125/udp'
+  # Service Settings for k6 Integration
+  # Note: You can only compose one statsd container at a time.
+  newrelic-statsd:
+    container_name: 'newrelic-statsd'
+    environment:
+      # Taken from your .env file, refer to ./test/perf/readme.md
+      # for additional instructions on obtaining a key.
+      - NR_API_KEY=${NEW_RELIC_K6_API_KEY}
+      - NR_ACCOUNT_ID=48461
+      - TAGS='app:k6 k6:sbns_perf env:dev role:load-testing'
+    image: 'newrelic/nri-statsd:latest'
+    hostname: ${HOSTNAME}
+    ports:
+      - '8125:8125/udp'
+    restart: unless-stopped

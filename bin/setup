@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
+
+username=$(npm --silent whoami || echo "")
+
+if [[ -z $username ]]; then
+
+cat <<- 'END'
+  You are not logged in to NPM!
+
+  This project installs @procore internal packages from NPM using an auth token
+  found in your local .npmrc file.
+
+  Login using:
+
+    npm login
+
+  Then provision a token using:
+
+    npm token create --read-only
+
+  Need help? Reach out to #team-application-infrastructure
+
+END
+
+  exit 1
+fi
+
+echo "$ npm install"
+npm install
+
+echo "verifying installation"
+echo "$ npm run test"
+npm run test

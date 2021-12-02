@@ -1,0 +1,9 @@
+dependencies:
+- name: stateless-http-service
+  repository: ""
+  version: 3.2.0
+- name: helpers-library
+  repository: ""
+  version: 0.0.1
+digest: sha256:e4e5df2dc0b07edf478ec78fe9d2fc1eb1e7f1fdc1944165a34c3e115d9d9fce
+generated: "2021-11-19T15:31:15.427008117-06:00"

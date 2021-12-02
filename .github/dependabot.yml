@@ -1,0 +1,17 @@
+version: 2
+registries:
+  npm-npmjs:
+    type: npm-registry
+    url: https://registry.npmjs.org
+    # this token is available organization-wide in github
+    # to check for private @procore package updates
+    token: ${{secrets.NPM_TOKEN}}
+
+updates:
+  - package-ecosystem: 'npm'
+    directory: '/'
+    registries:
+      - npm-npmjs
+    schedule:
+      interval: 'weekly'
+      timezone: America/Los_Angeles

@@ -1,0 +1,16 @@
+stateless-http-service:
+  serviceName: simple-backend-nest-service
+  image:
+    repository: quay.io/procoredevops/simple-backend-nest-service
+    tag: latest
+  # The tugboat app CRD injects these deploymentAnnotations
+  deploymentAnnotations: []
+  probes:
+    # Cf. https://github.com/procore/foundations-nest for details on health
+    # endpoint configuration.
+    livenessProbeOverride:
+      httpGet:
+        path: /health/liveness
+        port: http
+      initialDelaySeconds: 30
+      periodSeconds: 20

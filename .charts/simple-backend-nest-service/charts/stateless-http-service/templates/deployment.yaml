@@ -1,0 +1,173 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "..fullname" . }}
+  labels:
+    {{- include "..labels" . | nindent 4 }}
+  annotations:
+    # The tugboat app CRD injects these deploymentAnnotations
+    {{- with .Values.deploymentAnnotations }}
+      {{- toYaml . | nindent 8 }}
+    {{- end }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "..selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        seccomp.security.alpha.kubernetes.io/pod: "docker/default"
+        {{- with .Values.podAnnotations }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "..labels" . | nindent 8 }}
+    spec:
+      {{ if .Values.nodeGroup }}
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            preference:
+              matchExpressions:
+              - key: procore.com/node-group
+                operator: In
+                values:
+                  - {{ .Values.nodeGroup }}
+      {{ end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        {{- if .Values.oauth.enabled }}
+        - name: auth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.1.3
+          command: ["/bin/sh", "-c"]
+          args:
+            - /bin/oauth2_proxy
+          ports:
+            - containerPort: {{ .Values.oauth.oauth2_proxy_port }}
+          env:
+            - name: OAUTH2_PROXY_HTTP_ADDRESS
+              value: 0.0.0.0:{{ .Values.port }}
+            - name: OAUTH2_PROXY_PASS_USER_HEADERS
+              value: "true"
+            - name: OAUTH2_PROXY_PASS_HOST_HEADER
+              value: "true"
+            - name: OAUTH2_PROXY_EMAIL_DOMAINS
+              value: procore.com
+            - name: OAUTH2_PROXY_PROVIDER
+              value: {{ .Values.oauth.oauth2_provider }}
+            {{- if .Values.oauth.oauth2_oidc_issuer_url }}
+            - name: OAUTH2_PROXY_OIDC_ISSUER_URL
+              value: {{ .Values.oauth.oauth2_oidc_issuer_url }}
+            {{- end }}
+            {{- if .Values.oauth.oauth2_prefix }}
+            - name: OAUTH2_PROXY_PROXY_PREFIX
+              value: {{ .Values.oauth.oauth2_prefix }}
+            {{- end }}
+            - name: OAUTH2_PROXY_SKIP_PROVIDER_BUTTON
+              value: "true"
+            - name: OAUTH2_PROXY_REDIRECT_URL
+              value: {{ .Values.oauth.oauth2_proxy_redirect_url }}
+            - name: OAUTH2_PROXY_UPSTREAMS
+              value: http://0.0.0.0:{{ .Values.port }}
+          # envFrom secretsRef below provides the following "secret" environment variables:
+          #   OAUTH2_PROXY_COOKIE_SECRET
+          #   OAUTH2_PROXY_CLIENT_ID
+          #   OAUTH2_PROXY_CLIENT_SECRET
+          envFrom:
+            - secretRef:
+                name: {{ .Values.oauth.oauth2_secrets_name }}
+          resources:
+            requests:
+              memory: {{ .Values.resources.requests.memory | quote }}
+              cpu: {{ .Values.resources.requests.cpu | quote }}
+            limits:
+              memory: {{ .Values.resources.limits.memory | quote }}
+              cpu: {{ .Values.resources.limits.cpu | quote }}
+        {{- end}}
+        - name: {{ include "..serviceName" . }}
+          image: "{{ required "image repository is required" .Values.image.repository }}{{ if .Values.image.tag }}:{{ .Values.image.tag }}{{ end }}"
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "..serviceName" . }}-env
+          env:
+            {{- range .Values.secretKeys }}
+            - name: {{ . | upper }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "..serviceName" $ }}-secret
+                  key: {{ . | lower }}
+            {{- end }}
+            {{- if .Values.newrelic.enabled }}
+            - name: NEW_RELIC_ENABLED
+              value: "true"
+            - name: NEW_RELIC_LICENSE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "..serviceName" . }}-secret
+                  key: new_relic_license_key
+            {{- end }}
+            {{- if .Values.bugsnag.enabled }}
+            - name: ERROR_HANDLER
+              value: bugsnag
+            - name: BUGSNAG_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "..serviceName" . }}-secret
+                  key: bugsnag_api_key
+            {{- end }}
+            {{- if .Values.datadog.enabled }}
+            - name: METRICS_HANDLER
+              value: datadog
+            - name: DATADOG_AGENT_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.port }}
+              protocol: TCP
+          livenessProbe:
+            {{- if .Values.probes.livenessProbeOverride }}
+            {{- toYaml .Values.probes.livenessProbeOverride | nindent 12 }}
+            {{- else }}
+            {{- toYaml .Values.probes.liveness | nindent 12 }}
+            {{- end }}
+          readinessProbe:
+            {{- toYaml .Values.probes.readiness | nindent 12 }}
+          {{- if .Values.probes.startup }}
+          startupProbe:
+            {{- toYaml .Values.probes.startup | nindent 12 }}
+          {{- end }}
+          resources:
+            requests:
+              memory: {{ .Values.resources.requests.memory | quote }}
+              cpu: {{ .Values.resources.requests.cpu | quote }}
+            limits:
+              memory: {{ .Values.resources.limits.memory | quote }}
+              cpu: {{ .Values.resources.limits.cpu | quote }}
+          securityContext:
+            {{ include "..defaultContainerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - mountPath: /tmp
+              name: tmp
+            - mountPath: /data
+              name: projected-data-volume
+              readOnly: true
+      securityContext:
+        {{ include "..defaultPodSecurityContext" . | nindent 8 }}
+      automountServiceAccountToken: false
+      volumes:
+        - emptyDir:
+            medium: Memory
+          name: tmp
+        - name: projected-data-volume
+          projected:
+            sources:
+              {{- toYaml .Values.projectedDataVolumeSources | nindent 14 }}

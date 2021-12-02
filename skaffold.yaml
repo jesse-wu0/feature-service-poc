@@ -1,0 +1,36 @@
+apiVersion: skaffold/v2beta12
+kind: Config
+build:
+  local:
+    useBuildkit: true
+  artifacts:
+    - image: quay.io/procoredevops/simple-backend-nest-service
+      docker:
+        buildArgs:
+          version_sha: skaffold
+        secret:
+          id: NPM_TOKEN
+          src: .npmrc
+deploy:
+  helm:
+    releases:
+      - name: simple-backend-nest-service
+        # ⚠️ You _must_ install your charts into a namespace that you own, not
+        # the default namespace. You could either
+        #
+        # 1. implicitly configure Argo CD and Skaffold to namespace charts
+        # 2. explicitly set a namespace on all resources
+        #
+        # This example assumes we're doing the former, in which case you _must_
+        # supply a namespace in the "namespace" field of the Destination section when setting up an Argo CD workflow 
+        # See https://argocd.us00.ops.procoretech.com/applications/simple-backend-nest-service-us00-us00-operations?resource=&node=argoproj.io%2FApplication%2Fargo%2Fsimple-backend-nest-service-us00-us00-operations%2F0&tab=summary
+        # for an example of that setting.
+        #
+        # The following configures Skaffold to namespace local releases similarly
+        namespace: simple-backend-nest-service
+        createNamespace: true
+        chartPath: .charts/simple-backend-nest-service
+        valuesFiles:
+          - .charts/simple-backend-nest-service/stages/local/values.yaml
+        artifactOverrides:
+          stateless-http-service.image.repository: quay.io/procoredevops/simple-backend-nest-service

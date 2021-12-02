@@ -1,0 +1,8 @@
+.charts
+.circleci
+.npmrc
+documentation
+dist
+node_modules
+npm-debug.log
+test

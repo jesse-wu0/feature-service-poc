@@ -1,0 +1,32 @@
+{{- if .Values.ingressEnabled.vpn -}}
+kind: Gateway
+apiVersion: networking.istio.io/v1alpha3
+metadata:
+  name: {{ include "..fullname" . }}-vpn
+spec:
+  servers:
+    - hosts:
+      - {{ include "..fullname" . }}.{{ .Values.env.CLUSTER }}.{{ .Values.env.STAGE }}.procoretech{{ eq .Values.env.STAGE "staging" | ternary "-qa" "" }}.com
+    {{- range .Values.ingressVpn.hostNames }}
+      - {{ . }}
+    {{- end }}
+      port:
+        name: https
+        number: 443
+        protocol: HTTP
+      tls:
+        httpsRedirect: false
+    - hosts:
+      - {{ include "..fullname" . }}.{{ .Values.env.CLUSTER }}.{{ .Values.env.STAGE }}.procoretech{{ eq .Values.env.STAGE "staging" | ternary "-qa" "" }}.com
+    {{- range .Values.ingressVpn.hostNames }}
+      - {{ . }}
+    {{- end }}
+      port:
+        name: http
+        number: 80
+        protocol: HTTP
+      tls:
+        httpsRedirect: true
+  selector:
+    app: {{ required ".Values.ingressVpn.gatewayName is required when vpn ingress is enabled" .Values.ingressVpn.gatewayName }}
+{{- end }}

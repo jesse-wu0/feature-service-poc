@@ -1,0 +1,34 @@
+stateless-http-service:
+  env:
+    ENV: staging
+    STAGE: staging
+    CLUSTER: application
+
+  newrelic:
+    enabled: true
+
+  bugsnag:
+    enabled: true
+
+  datadog:
+    enabled: true
+
+  autoscaling:
+    enabled: true
+
+  imagePullPolicy: Always
+  imagePullSecrets:
+    - name: procoredevops-procore-sherpa-pull-secret
+
+  ingressEnabled:
+    private: true
+    vpn: true
+
+  ingressPrivate:
+    gatewayNames:
+      - istio-system/istio-private-staging1-istio-ingress-gateway
+
+  oauth:
+    enabled: false
+    oauth2_proxy_redirect_url: "https://simple-backend-nest-service.application.staging.procoretech-qa.com/oauth2/callback"
+    oauth2_secrets_name: "simple-backend-nest-service-oauth2-proxy-secrets"

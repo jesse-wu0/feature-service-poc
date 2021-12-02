@@ -1,0 +1,19 @@
+stateless-http-service:
+  env:
+    ENV: production
+    STAGE: production
+  newrelic:
+    enabled: true
+  bugsnag:
+    enabled: true
+  datadog:
+    enabled: true
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 4
+
+  imagePullPolicy: Always
+  imagePullSecrets:
+    - name: procoredevops-procore-sherpa-pull-secret

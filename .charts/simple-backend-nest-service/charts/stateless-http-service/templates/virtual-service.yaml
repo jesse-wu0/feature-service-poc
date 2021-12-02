@@ -1,0 +1,28 @@
+{{- if .Values.ingressEnabled.private -}}
+kind: VirtualService
+apiVersion: networking.istio.io/v1alpha3
+metadata:
+  name: {{ include "..fullname" . }}
+spec:
+  hosts:
+    - {{ include "..fullname" . }}.{{ .Values.env.CLUSTER }}.{{ .Values.env.STAGE }}.procoretech.internal
+  {{- range .Values.ingressPrivate.hostNames }}
+    - {{ . }}
+  {{- end }}
+  gateways:
+  {{- range .Values.ingressPrivate.gatewayNames }}
+    - {{ . }}
+  {{- end }}
+  http:
+    - route:
+      - destination:
+          host: {{ include "..fullname" . }}
+          port:
+            number: {{ .Values.service.port }}
+      {{- if .Values.ingressPrivate.forwardHttpsProtoHeader }}
+      headers:
+        request:
+          set:
+            x-forwarded-proto: https
+      {{- end }}
+{{- end }}

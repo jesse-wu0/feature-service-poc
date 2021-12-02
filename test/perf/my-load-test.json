@@ -1,0 +1,52 @@
+[
+  {
+    "request": {
+      "type": "GET",
+      "urlPath": "/"
+    },
+    "response": {
+      "status": "200",
+      "validationPaths": [
+        "message"
+      ]
+    }
+  },
+  {
+    "request": {
+      "type": "GET",
+      "urlPath": "/health"
+    },
+    "response": {
+      "status": "200",
+      "validationPaths": [
+        "info.memory_heap.status",
+        "details.memory_rss.status"
+      ]
+    }
+  },
+  {
+    "request": {
+      "type": "GET",
+      "urlPath": "/info"
+    },
+    "response": {
+      "status": "200",
+      "validationPaths": [
+        "uptime",
+        "version"
+      ]
+    }
+  },
+  {
+    "request": {
+      "type": "GET",
+      "urlPath": "/does-not-exist"
+    },
+    "response": {
+      "status": "404",
+      "validationPaths": [
+        "error"
+      ]
+    }
+  }
+]

@@ -1,0 +1,26 @@
+{{- if .Values.ingressEnabled.vpn -}}
+kind: VirtualService
+apiVersion: networking.istio.io/v1alpha3
+metadata:
+  name: {{ include "..fullname" . }}-vpn
+spec:
+  hosts:
+    - {{ include "..fullname" . }}.{{ .Values.env.CLUSTER }}.{{ .Values.env.STAGE }}.procoretech{{ eq .Values.env.STAGE "staging" | ternary "-qa" "" }}.com
+  {{- range .Values.ingressVpn.hostNames }}
+    - {{ . }}
+  {{- end }}
+  gateways:
+    - {{ include "..fullname" . }}-vpn
+  http:
+    - route:
+      - destination:
+          host: {{ include "..fullname" . }}
+          port:
+            number: {{ .Values.service.port }}
+      {{- if .Values.ingressVpn.forwardHttpsProtoHeader }}
+      headers:
+        request:
+          set:
+            x-forwarded-proto: https
+      {{- end }}
+{{- end }}

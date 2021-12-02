@@ -1,0 +1,8 @@
+apiVersion: v2
+description: A simple stateless HTTP service with a single deployment
+name: stateless-http-service
+type: application
+version: "3.2.0"
+dependencies:
+  - name: helpers-library
+    version: "0.0.1"

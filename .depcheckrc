@@ -1,0 +1,1 @@
+ignores: ["@compodoc/compodoc","@nestjs/schematics","@types/jest","@types/node","lint-staged","ts-loader","ts-node","tsconfig-paths","jest-junit","k6"]
